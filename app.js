@@ -252,6 +252,52 @@ function parseCSV(text, accountName) {
 
 // ============ SAMPLE DATA ============
 
+function deleteAllData() {
+    const confirmed = confirm('⚠️ WARNING: This will permanently delete ALL your financial data (transactions, holdings, budgets, rules) from both your device and Firebase.\n\nThis action CANNOT be undone.\n\nClick OK to confirm deletion.');
+    
+    if (!confirmed) {
+        showStatus('Deletion cancelled', 'info');
+        return;
+    }
+    
+    // Clear browser data
+    transactions = [];
+    holdings = { shares: [], properties: [], super: [], cash: [] };
+    budgets = {};
+    rules = [];
+    
+    // Clear localStorage
+    localStorage.removeItem('transactions');
+    localStorage.removeItem('holdings');
+    localStorage.removeItem('budgets');
+    localStorage.removeItem('rules');
+    
+    // Delete from Firebase if signed in
+    if (currentUser) {
+        try {
+            const db = firebase.firestore();
+            db.collection('users').doc(currentUser.uid)
+                .delete()
+                .then(() => {
+                    showStatus('✓ All data deleted successfully from Firebase and your device', 'success');
+                    render();
+                })
+                .catch(err => {
+                    console.error('Firebase delete error:', err);
+                    showStatus('Data deleted from device. Firebase delete failed: ' + err.message, 'error');
+                    render();
+                });
+        } catch (err) {
+            console.error('Delete error:', err);
+            showStatus('All data deleted from device', 'success');
+            render();
+        }
+    } else {
+        showStatus('✓ All data deleted from your device (not signed in to Firebase)', 'success');
+        render();
+    }
+}
+
 function loadSampleData() {
     transactions = [
         { id: 1, date: '2026-09-01', merchant: 'Woolworths', amount: 125.45, account: 'CBA', category: 'Groceries', type: 'expense' },

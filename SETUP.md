@@ -1,206 +1,196 @@
-# Personal Finance Tracker - Setup & Deployment
+# Personal Finance Tracker - Firebase Setup
 
-A hosted personal finance app on GitHub Pages with GitHub-backed statement storage.
+A personal finance app hosted on GitHub Pages with **Firebase Firestore** for real-time data storage.
 
-## Quick Start
+## Quick Start (5 minutes)
 
-### 1. Fork & Deploy to GitHub Pages
+### 1. Deploy to GitHub Pages
 
-1. **Create a new GitHub repository** called `finance-tracker` (public)
-2. **Upload these files:**
-   - `index.html`
-   - `app.js`
-   - `SETUP.md` (this file)
+1. Create a new public repo called `finance-tracker`
+2. Upload these 3 files:
+   - `index-firebase.html` (rename to `index.html`)
+   - `app-firebase.js` (rename to `app.js`)
+   - `SETUP-FIREBASE.md` (this file)
 
-3. **Enable GitHub Pages:**
-   - Go to Settings → Pages
-   - Set source to `main` branch
-   - Your app will be live at `https://<your-username>.github.io/finance-tracker/`
+3. Enable GitHub Pages:
+   - Settings → Pages
+   - Source: `Deploy from a branch` → `main` branch
+   - Your app will be live at: `https://<username>.github.io/finance-tracker/`
 
-### 2. Set Up GitHub Authentication
+### 2. Firebase is Already Configured
 
-The app uses GitHub to store bank statements securely in a private repo.
+✅ The app already has your Firebase config:
+- Project: `finance-tracker-68b8c`
+- Firestore Database: Enabled and ready
 
-#### Option A: Use Personal Access Token (Recommended for now)
+### 3. First Time Using the App
 
-1. Go to https://github.com/settings/tokens
-2. Click "Generate new token (classic)"
-3. Select scope: `repo` (full control of private repositories)
-4. Copy the token
-5. When you first click "Connect GitHub" in the app, paste your token
+1. Open your live app: `https://<username>.github.io/finance-tracker/`
+2. Click **"Sign In"** button (top right)
+3. App will sign you in anonymously to Firebase
+4. You'll see **"Synced"** indicator turn green
+5. All your data now syncs to Firebase in real-time!
 
-#### Option B: Set Up OAuth App (For production)
+### 4. Upload Bank Statements
 
-1. Go to https://github.com/settings/developers
-2. Click "New GitHub App"
-3. Fill in:
-   - **App name:** Finance Tracker
-   - **Homepage URL:** `https://<your-username>.github.io/finance-tracker/`
-   - **Callback URL:** `https://<your-username>.github.io/finance-tracker/`
-   - **Permissions:** 
-     - Repository contents: Read & Write
-     - Metadata: Read-only
-4. Copy the **Client ID**
-5. In `app.js`, update line 4:
-   ```javascript
-   const GITHUB_CLIENT_ID = 'YOUR_CLIENT_ID_HERE';
-   ```
+1. Click **"Upload"** tab
+2. Select your CSV/Excel statement
+3. Enter account name (e.g., "CBA Everyday")
+4. Click **"Process & save to Firebase"**
+5. Data is instantly saved to Firestore
 
-### 3. How It Works
+### 5. Add Holdings
 
-**Bank Statement Upload Flow:**
-1. Click "Upload" tab
-2. Select CSV/Excel bank statement from your institution
-3. Enter account name (e.g., "CBA Everyday", "Amex")
-4. Click "Process & save to GitHub"
-5. Statements are saved to private `finance-statements` repo with path:
-   ```
-   statements/{AccountName}/{YYYY-MM-DD}_{filename}
-   ```
+- **Shares & ETFs:** Add VAS, VGS, individual stocks
+- **Properties:** Record your real estate
+- **Superannuation:** Track SMSF, industry funds
+- **Cash:** Savings accounts, term deposits
 
-**Data Storage:**
-- **Local:** All data stored in browser localStorage (private, offline access)
-- **GitHub:** Bank statements stored in private repo for audit trail & backup
-- **Syncing:** Manual - you control what gets uploaded
+All data syncs to Firebase automatically.
 
-### 4. File Structure After Setup
+---
+
+## How It Works
+
+### Data Storage
 
 ```
-Your GitHub Account
-├── finance-tracker (public)
-│   ├── index.html
-│   ├── app.js
-│   └── SETUP.md
-└── finance-statements (private, auto-created)
-    └── statements/
-        ├── CBA Everyday/
-        │   ├── 2026-09-01_statement.csv
-        │   └── 2026-09-05_statement.csv
-        └── Amex/
-            └── 2026-09-10_statement.csv
+Your App (GitHub Pages)
+    ↓
+Firebase Authentication (Anonymous login)
+    ↓
+Firestore Database (Real-time sync)
+    ↓
+Your Browser (Offline backup in localStorage)
 ```
 
-## CSV Format Requirements
+**Three layers of safety:**
+1. **Firestore** — Live, cloud-backed data
+2. **Browser localStorage** — Offline access, device-level backup
+3. **Real-time sync** — Changes sync instantly across devices
 
-Your bank statement CSV must have these columns (any order):
+### Your Data in Firebase
+
+Location: `Firestore > Collection: users > Document: {your-user-id}`
 
 ```
-Date,Merchant,Amount
-2026-09-01,Woolworths,125.45
-2026-09-05,Salary,5000.00
-2026-09-10,Electricity,180.00
+users/
+└── {anonymous-user-id}/
+    ├── transactions: [...]
+    ├── holdings: { shares: [], properties: [], super: [], cash: [] }
+    ├── budgets: { ... }
+    ├── rules: [ ... ]
+    └── lastUpdated: timestamp
 ```
 
-**Supported formats:**
-- CSV (comma-separated)
-- Excel (.xlsx, .xls)
-- Exported from: CBA, Westpac, ANZ, NAB, ING, Macquarie, etc.
+---
 
 ## Features
 
-### Banking & Transactions
-- Import statements from multiple accounts
-- Auto-categorise transactions with rules
-- Search & filter transactions
-- Monthly spending breakdown by category
+### 📊 Banking & Transactions
+- Import CSV/Excel statements
+- Auto-categorise with rules
+- Multi-account tracking
+- Monthly spending breakdown
 
-### Portfolio Management
-- Track shares & ETFs (VAS, VGS, etc.)
-- Record properties (dual-occupancy, rentals)
-- Monitor superannuation (industry & SMSF)
-- Cash & savings accounts
-- Unrealised gains/losses on investments
+### 💼 Portfolio Management
+- Shares & ETFs (cost basis, gains/losses)
+- Properties (equity, rental income)
+- Superannuation (SMSF, industry funds)
+- Cash accounts (savings, fixed income)
 
-### Budgeting
-- Set monthly budgets by category
+### 💰 Net Worth Dashboard
+- Total net worth calculation
+- Asset allocation breakdown
+- Rental yield tracking
+- Investment performance
+
+### 📋 Budgeting
+- Monthly budgets by category
 - Real-time tracking vs. budget
 - Visual progress indicators
 
-### Analytics
-- Net worth calculation
-- Asset allocation breakdown
-- Rental income tracking
-- Property equity monitoring
-- Investment performance dashboard
+---
+
+## Offline Access
+
+✅ App works **offline**:
+- Browser stores local copy in localStorage
+- When online, syncs to Firebase
+- No data loss if you're offline
+
+⚠️ **Note:** If you use multiple devices:
+- Device A saves to Firebase
+- Device B pulls latest from Firebase
+- Both stay in sync automatically
+
+---
 
 ## Security & Privacy
 
 ✅ **What's secure:**
-- Bank statements stored in **private GitHub repo** only you can access
-- All data encrypted in GitHub (using HTTPS)
-- Statements versioned with audit trail (who uploaded what, when)
-- Browser data stored locally in your device only
+- Data stored in **private Firestore database** (only you can access)
+- Anonymous Firebase authentication (no password needed)
+- HTTPS encryption for all data in transit
+- Firebase's enterprise-grade security
 
-✅ **What you control:**
-- Only YOU decide which statements to upload
-- Personal Access Token stored locally in browser
-- You can revoke token anytime at https://github.com/settings/tokens
+✅ **You control:**
+- What data you add
+- When you sign in/out
+- Deleting holdings/transactions anytime
 
-⚠️ **Best practices:**
-- Use GitHub's Private repositories for statement repo
-- Rotate Personal Access Token quarterly
-- Don't share your GitHub token or repo link
-- Review uploaded files in repo regularly
+---
 
-## Common Tasks
+## Managing Your Data
 
-### View Uploaded Statements
-1. Go to GitHub: `github.com/<your-username>/finance-statements`
-2. Navigate to `statements/` folder to see all uploads
-3. Each file is timestamped: `2026-09-01_statement.csv`
+### View Data in Firebase
 
-### Download Statements from GitHub
-```bash
-git clone https://github.com/<your-username>/finance-statements.git
-cd finance-statements
-ls statements/
-```
+1. Go to: https://console.firebase.google.com/u/0/project/finance-tracker-68b8c
+2. Click **"Firestore Database"**
+3. You'll see your user document with all data
 
-### Re-upload an Old Statement
-1. Open the Finance Tracker
-2. In Upload tab, select the same file again
-3. It will create a new timestamped entry
-4. Transactions are deduplicated automatically (same merchant + date)
+### Export Your Data
 
-### Export All Data
-**Transactions:** View all transactions, copy the table
-**Holdings:** Manually record or export to Excel
-**Note:** Statements on GitHub are your permanent record
+Your data is portable:
+1. Go to Firestore, select your user document
+2. Copy the JSON
+3. Or export CSV from the app dashboard (future feature)
 
-### Change Account Name
-1. In `finance-statements` repo, rename folder: `statements/OldName` → `statements/NewName`
-2. In app, re-upload with new name
-3. Old data in browser localStorage still exists (manually clear if needed)
+### Delete Data
+
+From the app:
+- Click any transaction/holding → Remove button → saved to Firebase
+
+From Firestore:
+1. Console → Firestore → Select your document → Delete
+
+---
 
 ## Troubleshooting
 
-### "Failed to authenticate with GitHub"
-- Check your Personal Access Token is valid
-- Go to https://github.com/settings/tokens, verify token scope includes `repo`
-- Regenerate token if expired
+| Problem | Solution |
+|---------|----------|
+| "App won't load" | Check GitHub Pages is enabled (Settings > Pages) |
+| "Sign In fails" | Firebase SDK may not have loaded. Refresh page. |
+| "Synced indicator red" | Check internet connection. App works offline too. |
+| "Data not syncing" | Check browser console (F12) for errors |
+| "Can't see Firestore data" | Go to https://console.firebase.google.com, check project |
 
-### "statements repo not found"
-- App auto-creates it on first use
-- Wait 10 seconds, refresh page
-- Or manually create private repo named `finance-statements`
+### Check Browser Console
 
-### "File upload failed"
-- Check token permissions (must have `repo` scope)
-- File size must be < 1MB
-- CSV must follow format above
+Press `F12` → Console tab → Look for errors
 
-### "Data disappeared after refresh"
-- Browser localStorage is separate per domain
-- Private browsing/Incognito clears data on exit
-- Check browser storage isn't full (Settings > Privacy > Clear browsing data)
+If you see `firebase is not defined`:
+- Wait 10 seconds for Firebase SDK to load
+- Refresh page
+
+---
 
 ## Advanced: Local Development
 
-If you want to modify the app:
-
 ```bash
 # Clone your repo
-git clone https://github.com/<your-username>/finance-tracker.git
+git clone https://github.com/<username>/finance-tracker.git
 cd finance-tracker
 
 # Run local server (Python 3)
@@ -212,24 +202,43 @@ npx http-server
 # Open http://localhost:8000
 ```
 
-## Roadmap (Future Features)
+Your local version will sync to the same Firebase database as your live app.
 
-- [ ] Automatic bank API sync (Plaid integration)
-- [ ] Multi-user access with permission levels
+---
+
+## Firebase Project Details
+
+- **Project ID:** `finance-tracker-68b8c`
+- **Region:** US (default)
+- **Database:** Firestore (NoSQL)
+- **Authentication:** Anonymous
+- **Storage:** Firestore Collections
+
+You can monitor usage at: https://console.firebase.google.com/u/0/project/finance-tracker-68b8c
+
+---
+
+## Roadmap
+
+- [ ] Google Sign-In (instead of anonymous)
+- [ ] Multi-device sync enhancements
 - [ ] Tax reporting (capital gains, rental income)
-- [ ] Mortgage amortisation tracking
 - [ ] SMSF compliance checker
 - [ ] Dark mode
-- [ ] Mobile app (React Native)
+- [ ] Mobile app
+- [ ] CSV export
+- [ ] Plaid bank API integration
+
+---
 
 ## Support
 
-For issues:
-1. Check this SETUP.md
-2. GitHub personal access token help: https://github.com/settings/tokens
-3. GitHub Pages help: https://docs.github.com/en/pages
+For Firebase issues:
+- Firebase Docs: https://firebase.google.com/docs/firestore
+- GitHub Pages Docs: https://docs.github.com/en/pages
 
 ---
 
 **Created:** 2026
-**License:** MIT (use freely, modify as you like)
+**Last Updated:** 2026-09-15
+**License:** MIT

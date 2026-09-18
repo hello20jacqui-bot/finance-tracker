@@ -1,161 +1,190 @@
-// GitHub OAuth configuration
-const GITHUB_CLIENT_ID = 'YOUR_GITHUB_CLIENT_ID'; // You'll set this after creating OAuth app
-const REDIRECT_URI = window.location.origin + window.location.pathname;
+// Firebase Configuration
+const firebaseConfig = {
+  apiKey: "AIzaSyFrfHKyRe6okhN4r5w8LJO-9XIAZg0wWow",
+  authDomain: "finance-tracker-68b8c.firebaseapp.com",
+  projectId: "finance-tracker-68b8c",
+  storageBucket: "finance-tracker-68b8c.firebaseapp.com",
+  messagingSenderId: "518567453964",
+  appId: "1:518567453964:web:0284b40be4bd0c77a5d529"
+};
 
+// Initialize Firebase
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+let currentUser = null;
 let transactions = [];
 let holdings = { shares: [], properties: [], super: [], cash: [] };
 let budgets = {};
 let rules = [];
-let accounts = {};
-let githubToken = null;
-let githubUser = null;
 let allocationChart = null;
 
 const categories = ['Groceries', 'Dining', 'Fuel', 'Utilities', 'Insurance', 'Shopping', 'Travel', 'Entertainment', 'Medical', 'Education', 'Subscriptions', 'Transport', 'Other'];
 
-// Initialize on page load
+// Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    loadFromLocalStorage();
-    checkGitHubAuth();
-    render();
+    checkAuthState();
+    loadFromFirestore();
 });
 
-// ============ GITHUB OAUTH ============
+// ============ FIREBASE AUTH ============
 
-function loginGitHub() {
-    if (githubToken) {
+function checkAuthState() {
+    auth.onAuthStateChanged(user => {
+        currentUser = user;
+        updateAuthUI();
+        if (user) {
+            loadFromFirestore();
+        } else {
+            loadFromLocalStorage();
+        }
+        render();
+    });
+}
+
+function loginFirebase() {
+    if (currentUser) {
         logout();
         return;
     }
-    const authUrl = `https://github.com/login/oauth/authorize?client_id=${GITHUB_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&scope=repo`;
-    window.location.href = authUrl;
-}
-
-function checkGitHubAuth() {
-    const params = new URLSearchParams(window.location.search);
-    const code = params.get('code');
     
-    if (code) {
-        // Exchange code for token (this requires a backend)
-        exchangeCodeForToken(code);
-        // Remove code from URL
-        window.history.replaceState({}, document.title, REDIRECT_URI);
-    }
-    
-    // Check for stored token
-    const stored = localStorage.getItem('github_token');
-    if (stored) {
-        githubToken = stored;
-        fetchGitHubUser();
-    }
-    
-    updateAuthUI();
-}
-
-function exchangeCodeForToken(code) {
-    // Note: This is a simplified flow. In production, you'd use a backend service
-    // to securely exchange the code for a token. For now, we'll use personal access tokens.
-    const token = prompt('Enter your GitHub Personal Access Token:\n\n1. Go to github.com/settings/tokens\n2. Generate new token (classic) with "repo" scope\n3. Paste it here:');
-    
-    if (token) {
-        githubToken = token;
-        localStorage.setItem('github_token', token);
-        fetchGitHubUser();
-        updateAuthUI();
-    }
-}
-
-function fetchGitHubUser() {
-    if (!githubToken) return;
-    
-    fetch('https://api.github.com/user', {
-        headers: { 'Authorization': `token ${githubToken}` }
-    })
-    .then(r => r.json())
-    .then(data => {
-        githubUser = data;
-        updateAuthUI();
-        ensureStatementsRepo();
-    })
-    .catch(err => {
-        console.error('GitHub auth failed:', err);
-        logout();
-    });
+    // Anonymous sign-in for now (you can add Google/Email later)
+    auth.signInAnonymously()
+        .then(() => {
+            updateAuthUI();
+        })
+        .catch(err => {
+            console.error('Auth error:', err);
+            showStatus('Authentication failed', 'error');
+        });
 }
 
 function updateAuthUI() {
     const userInfo = document.getElementById('user-info');
-    const loginBtn = document.getElementById('github-login');
+    const loginBtn = document.getElementById('firebase-login');
+    const syncStatus = document.getElementById('sync-status');
     
-    if (githubUser) {
+    if (currentUser) {
         userInfo.innerHTML = `<div class="user-badge">
-            <i class="fas fa-user-circle"></i> ${githubUser.login}
+            <i class="fas fa-user-circle"></i> Signed in
         </div>`;
-        loginBtn.textContent = 'Logout';
+        loginBtn.textContent = 'Sign Out';
+        syncStatus.innerHTML = '<div class="sync-dot"></div><span>Synced</span>';
     } else {
         userInfo.innerHTML = '';
-        loginBtn.textContent = 'Connect GitHub';
+        loginBtn.textContent = 'Sign In';
+        syncStatus.innerHTML = '<div class="sync-dot"></div><span>Offline</span>';
     }
 }
 
 function logout() {
-    githubToken = null;
-    githubUser = null;
-    localStorage.removeItem('github_token');
-    localStorage.removeItem('github_repo');
-    updateAuthUI();
+    auth.signOut()
+        .then(() => {
+            currentUser = null;
+            updateAuthUI();
+            loadFromLocalStorage();
+            render();
+        })
+        .catch(err => console.error('Logout error:', err));
 }
 
-async function ensureStatementsRepo() {
-    if (!githubToken) return;
-    
-    // Check if statements repo exists
-    const repoName = 'finance-statements';
+// ============ FIRESTORE OPERATIONS ============
+
+async function saveToFirestore() {
+    if (!currentUser) {
+        saveToLocalStorage();
+        return;
+    }
     
     try {
-        const resp = await fetch(`https://api.github.com/repos/${githubUser.login}/${repoName}`, {
-            headers: { 'Authorization': `token ${githubToken}` }
-        });
+        const userRef = db.collection('users').doc(currentUser.uid);
         
-        if (resp.status === 404) {
-            // Create repo
-            createStatementsRepo(repoName);
-        } else if (resp.ok) {
-            localStorage.setItem('github_repo', repoName);
-        }
+        await userRef.set({
+            transactions: transactions,
+            holdings: holdings,
+            budgets: budgets,
+            rules: rules,
+            lastUpdated: new Date()
+        }, { merge: true });
+        
+        showStatus('✓ Saved to Firebase', 'success');
     } catch (err) {
-        console.error('Repo check failed:', err);
+        console.error('Firestore save error:', err);
+        showStatus('Error saving to Firebase', 'error');
+        // Fallback to local storage
+        saveToLocalStorage();
     }
 }
 
-async function createStatementsRepo(repoName) {
+async function loadFromFirestore() {
+    if (!currentUser) return;
+    
     try {
-        const resp = await fetch('https://api.github.com/user/repos', {
-            method: 'POST',
-            headers: {
-                'Authorization': `token ${githubToken}`,
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                name: repoName,
-                description: 'Bank statements and financial records',
-                private: true,
-                auto_init: true
-            })
-        });
+        const userRef = db.collection('users').doc(currentUser.uid);
+        const doc = await userRef.get();
         
-        if (resp.ok) {
-            localStorage.setItem('github_repo', repoName);
-            showStatus('Created private GitHub repo for statements', 'success');
+        if (doc.exists) {
+            const data = doc.data();
+            transactions = data.transactions || [];
+            holdings = data.holdings || { shares: [], properties: [], super: [], cash: [] };
+            budgets = data.budgets || {};
+            rules = data.rules || [];
+            
+            // Also save to local for offline access
+            saveToLocalStorage();
+            render();
+        } else {
+            // New user - load sample or empty
+            loadFromLocalStorage();
         }
+        
+        // Set up real-time listener
+        setupRealtimeListener();
     } catch (err) {
-        console.error('Repo creation failed:', err);
+        console.error('Firestore load error:', err);
+        loadFromLocalStorage();
     }
 }
 
-// ============ FILE UPLOAD & GITHUB STORAGE ============
+function setupRealtimeListener() {
+    if (!currentUser) return;
+    
+    db.collection('users').doc(currentUser.uid)
+        .onSnapshot(doc => {
+            if (doc.exists) {
+                const data = doc.data();
+                transactions = data.transactions || [];
+                holdings = data.holdings || { shares: [], properties: [], super: [], cash: [] };
+                budgets = data.budgets || {};
+                rules = data.rules || [];
+                saveToLocalStorage();
+                render();
+            }
+        }, err => {
+            console.error('Realtime listener error:', err);
+        });
+}
 
-async function uploadFile() {
+// ============ LOCAL STORAGE (Offline Fallback) ============
+
+function saveToLocalStorage() {
+    localStorage.setItem('transactions', JSON.stringify(transactions));
+    localStorage.setItem('holdings', JSON.stringify(holdings));
+    localStorage.setItem('budgets', JSON.stringify(budgets));
+    localStorage.setItem('rules', JSON.stringify(rules));
+}
+
+function loadFromLocalStorage() {
+    transactions = JSON.parse(localStorage.getItem('transactions')) || [];
+    holdings = JSON.parse(localStorage.getItem('holdings')) || { shares: [], properties: [], super: [], cash: [] };
+    budgets = JSON.parse(localStorage.getItem('budgets')) || {};
+    rules = JSON.parse(localStorage.getItem('rules')) || [];
+}
+
+// ============ FILE UPLOAD & CSV PARSING ============
+
+function uploadFile() {
     const file = document.getElementById('file-input').files[0];
     const accountName = document.getElementById('account-name').value;
     
@@ -164,146 +193,24 @@ async function uploadFile() {
         return;
     }
     
-    if (!githubToken) {
-        showStatus('Connect GitHub first to save statements', 'error');
-        return;
-    }
-    
     showStatus('Processing file...', 'info');
     
     const reader = new FileReader();
-    reader.onload = async (e) => {
+    reader.onload = (e) => {
         const text = e.target.result;
         parseCSV(text, accountName);
-        
-        // Upload to GitHub
-        await saveToGitHub(file.name, text, accountName);
-        
+        saveToFirestore();
         document.getElementById('file-input').value = '';
         document.getElementById('account-name').value = '';
-        loadUploadHistory();
+        showStatus('✓ File uploaded and saved', 'success');
         render();
     };
     reader.readAsText(file);
 }
 
-async function saveToGitHub(filename, content, accountName) {
-    const repoName = localStorage.getItem('github_repo') || 'finance-statements';
-    const timestamp = new Date().toISOString().split('T')[0];
-    const path = `statements/${accountName}/${timestamp}_${filename}`;
-    
-    try {
-        const resp = await fetch(
-            `https://api.github.com/repos/${githubUser.login}/${repoName}/contents/${path}`,
-            {
-                method: 'PUT',
-                headers: {
-                    'Authorization': `token ${githubToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify({
-                    message: `Upload ${accountName} statement from ${timestamp}`,
-                    content: btoa(content),
-                    branch: 'main'
-                })
-            }
-        );
-        
-        if (resp.ok) {
-            showStatus(`✓ Saved to GitHub: ${path}`, 'success');
-        } else {
-            showStatus('GitHub save failed', 'error');
-        }
-    } catch (err) {
-        console.error('GitHub upload error:', err);
-        showStatus('GitHub upload error', 'error');
-    }
-}
-
-async function loadUploadHistory() {
-    if (!githubToken) return;
-    
-    const repoName = localStorage.getItem('github_repo');
-    if (!repoName) return;
-    
-    try {
-        const resp = await fetch(
-            `https://api.github.com/repos/${githubUser.login}/${repoName}/contents/statements`,
-            {
-                headers: { 'Authorization': `token ${githubToken}` }
-            }
-        );
-        
-        if (!resp.ok) return;
-        
-        const data = await resp.json();
-        if (!Array.isArray(data)) return;
-        
-        const html = data
-            .filter(f => f.type === 'dir')
-            .map(account => `
-                <div style="margin-bottom: 1rem;">
-                    <strong>${account.name}</strong>
-                    <div id="files-${account.name}" style="margin-top: 0.5rem; padding-left: 1rem; font-size: 12px; color: #666;"></div>
-                </div>
-            `).join('');
-        
-        const historyEl = document.getElementById('file-history');
-        document.getElementById('file-list-content').innerHTML = html;
-        historyEl.style.display = 'block';
-        
-        // Fetch files for each account
-        for (const account of data.filter(f => f.type === 'dir')) {
-            loadAccountFiles(account.name, repoName);
-        }
-    } catch (err) {
-        console.error('Load history failed:', err);
-    }
-}
-
-async function loadAccountFiles(accountName, repoName) {
-    try {
-        const resp = await fetch(
-            `https://api.github.com/repos/${githubUser.login}/${repoName}/contents/statements/${accountName}`,
-            {
-                headers: { 'Authorization': `token ${githubToken}` }
-            }
-        );
-        
-        if (!resp.ok) return;
-        
-        const files = await resp.json();
-        if (!Array.isArray(files)) return;
-        
-        const html = files
-            .filter(f => f.type === 'file')
-            .sort((a, b) => new Date(b.name) - new Date(a.name))
-            .slice(0, 10)
-            .map(f => `<div class="file-item">
-                <span>${f.name}</span>
-                <span class="file-date">${new Date(f.name.split('_')[0]).toLocaleDateString()}</span>
-            </div>`)
-            .join('');
-        
-        document.getElementById(`files-${accountName}`).innerHTML = html || '<div style="color: #999;">No files</div>';
-    } catch (err) {
-        console.error('Load account files failed:', err);
-    }
-}
-
-function showStatus(msg, type) {
-    const el = document.getElementById('upload-status');
-    el.className = `status-message status-${type}`;
-    el.textContent = msg;
-}
-
-// ============ CSV PARSING ============
-
 function parseCSV(text, accountName) {
     const lines = text.trim().split('\n');
     if (lines.length < 2) return;
-    
-    accounts[accountName] = { name: accountName, added: new Date().toLocaleDateString() };
     
     for (let i = 1; i < lines.length; i++) {
         const cols = lines[i].split(',').map(c => c.trim());
@@ -324,28 +231,11 @@ function parseCSV(text, accountName) {
         const rule = rules.find(r => merchant.toLowerCase().includes(r.merchant.toLowerCase()));
         if (rule) trans.category = rule.category;
         
-        transactions.push(trans);
+        // Check for duplicates
+        if (!transactions.find(t => t.date === date && t.merchant === merchant && t.amount === amount)) {
+            transactions.push(trans);
+        }
     }
-    
-    saveToLocalStorage();
-}
-
-// ============ LOCAL STORAGE ============
-
-function saveToLocalStorage() {
-    localStorage.setItem('transactions', JSON.stringify(transactions));
-    localStorage.setItem('holdings', JSON.stringify(holdings));
-    localStorage.setItem('budgets', JSON.stringify(budgets));
-    localStorage.setItem('rules', JSON.stringify(rules));
-    localStorage.setItem('accounts', JSON.stringify(accounts));
-}
-
-function loadFromLocalStorage() {
-    transactions = JSON.parse(localStorage.getItem('transactions')) || [];
-    holdings = JSON.parse(localStorage.getItem('holdings')) || { shares: [], properties: [], super: [], cash: [] };
-    budgets = JSON.parse(localStorage.getItem('budgets')) || {};
-    rules = JSON.parse(localStorage.getItem('rules')) || [];
-    accounts = JSON.parse(localStorage.getItem('accounts')) || {};
 }
 
 // ============ SAMPLE DATA ============
@@ -382,9 +272,15 @@ function loadSampleData() {
     budgets = { 'Groceries': 400, 'Utilities': 250, 'Fuel': 200, 'Entertainment': 300 };
     rules = [{ id: 1, merchant: 'Woolworths', category: 'Groceries' }, { id: 2, merchant: 'Ampol', category: 'Fuel' }];
     
-    saveToLocalStorage();
+    saveToFirestore();
     render();
     showStatus('✓ Sample data loaded', 'success');
+}
+
+function showStatus(msg, type) {
+    const el = document.getElementById('upload-status');
+    el.className = `status-message status-${type}`;
+    el.textContent = msg;
 }
 
 // ============ UI INTERACTION ============
@@ -408,7 +304,7 @@ function openShareForm() {
     
     if (symbol && qty && costBasis && currentPrice) {
         holdings.shares.push({ id: Date.now(), symbol, name, qty, costBasis, currentPrice });
-        saveToLocalStorage();
+        saveToFirestore();
         render();
     }
 }
@@ -424,7 +320,7 @@ function openPropertyForm() {
     
     if (address && purchasePrice && currentValue && mortgage !== undefined && rentalIncome) {
         holdings.properties.push({ id: Date.now(), address, purchasePrice, currentValue, mortgage, rentalIncome, rentalFreq });
-        saveToLocalStorage();
+        saveToFirestore();
         render();
     }
 }
@@ -437,7 +333,7 @@ function openSuperForm() {
     
     if (name && balance !== undefined) {
         holdings.super.push({ id: Date.now(), name, balance, contribution, freq: 'monthly' });
-        saveToLocalStorage();
+        saveToFirestore();
         render();
     }
 }
@@ -450,14 +346,14 @@ function openCashForm() {
     
     if (name && balance !== undefined) {
         holdings.cash.push({ id: Date.now(), name, balance, rate });
-        saveToLocalStorage();
+        saveToFirestore();
         render();
     }
 }
 
 function deleteHolding(type, id) {
     holdings[type] = holdings[type].filter(h => h.id !== id);
-    saveToLocalStorage();
+    saveToFirestore();
     render();
 }
 
@@ -467,7 +363,7 @@ function openBudgetForm() {
     const amount = prompt('Monthly budget ($):');
     if (amount) {
         budgets[cat] = parseFloat(amount);
-        saveToLocalStorage();
+        saveToFirestore();
         render();
     }
 }
@@ -478,18 +374,18 @@ function openRuleForm() {
     const cat = prompt('Category:');
     if (cat) {
         rules.push({ id: Date.now(), merchant, category: cat });
-        saveToLocalStorage();
+        saveToFirestore();
         render();
     }
 }
 
 function deleteRule(id) {
     rules = rules.filter(r => r.id !== id);
-    saveToLocalStorage();
+    saveToFirestore();
     render();
 }
 
-// ============ CALCULATIONS ============
+// ============ CALCULATIONS & RENDERING ============
 
 function calculateMetrics() {
     const now = new Date();
@@ -663,17 +559,14 @@ function render() {
     // Holdings
     renderHoldings();
     
-    // Transactions table
+    // Transactions
     renderTransactions();
     
     // Budgets
     renderBudgets();
-    
-    if (githubToken) loadUploadHistory();
 }
 
 function renderHoldings() {
-    // Shares
     const sharesHTML = holdings.shares.length ? holdings.shares.map(s => {
         const value = s.qty * s.currentPrice;
         const gain = value - s.costBasis;
@@ -694,7 +587,6 @@ function renderHoldings() {
     const sharesEl = document.getElementById('shares-list');
     if (sharesEl) sharesEl.innerHTML = sharesHTML;
 
-    // Properties
     const propHTML = holdings.properties.length ? holdings.properties.map(p => {
         const equity = p.currentValue - p.mortgage;
         const annualRental = p.rentalFreq === 'weekly' ? p.rentalIncome * 52 : p.rentalIncome * 12;
@@ -715,7 +607,6 @@ function renderHoldings() {
     const propEl = document.getElementById('properties-list');
     if (propEl) propEl.innerHTML = propHTML;
 
-    // Super
     const superHTML = holdings.super.length ? holdings.super.map(s => {
         const annualCont = s.contribution * 12;
         return `
@@ -734,7 +625,6 @@ function renderHoldings() {
     const superEl = document.getElementById('super-list');
     if (superEl) superEl.innerHTML = superHTML;
 
-    // Cash
     const cashHTML = holdings.cash.length ? holdings.cash.map(c => `
         <div class="holding-row">
             <div class="holding-info">

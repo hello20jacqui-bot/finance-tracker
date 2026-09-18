@@ -155,8 +155,6 @@
         }
         .btn-secondary:hover { background: #f9f9f9; }
         .btn-small { padding: 6px 12px; font-size: 12px; }
-        .btn-danger { background: #ef4444; }
-        .btn-danger:hover { background: #dc2626; }
         table { 
             width: 100%; 
             border-collapse: collapse; 
@@ -271,7 +269,7 @@
             <div id="user-info"></div>
             <div class="sync-indicator" id="sync-status">
                 <div class="sync-dot"></div>
-                <span>Syncing...</span>
+                <span>Offline</span>
             </div>
             <button class="firebase-btn" id="firebase-login" onclick="loginFirebase()">
                 <i class="fas fa-sign-in-alt"></i> Sign In
@@ -288,7 +286,6 @@
         <button class="tab-btn" onclick="switchTab('upload')"><i class="fas fa-cloud-upload-alt"></i> Upload</button>
     </div>
 
-    <!-- DASHBOARD -->
     <div id="dashboard" class="section active">
         <div class="metric-grid">
             <div class="metric">
@@ -322,31 +319,24 @@
         </div>
     </div>
 
-    <!-- TRANSACTIONS -->
     <div id="transactions" class="section">
         <div class="card">
             <h3>All transactions</h3>
-            <div style="margin-bottom: 1rem;">
-                <input type="search" id="search-trans" placeholder="Search by merchant..." style="width: 100%; padding: 10px 12px; border: 1px solid #e0e0e0; border-radius: 6px;">
-            </div>
-            <div id="all-trans-table" class="table-wrapper"></div>
+            <div id="all-trans-table"></div>
         </div>
     </div>
 
-    <!-- PORTFOLIO -->
     <div id="portfolio" class="section">
         <div class="card">
             <h3>Portfolio summary</h3>
             <div class="metric-grid" id="port-summary"></div>
         </div>
-
         <div class="card">
             <h3>Asset allocation</h3>
-            <canvas id="allocation-chart" style="max-height: 300px;" role="img" aria-label="Portfolio allocation pie chart"></canvas>
+            <canvas id="allocation-chart" style="max-height: 300px;"></canvas>
         </div>
     </div>
 
-    <!-- HOLDINGS -->
     <div id="holdings" class="section">
         <div class="card">
             <h3>Shares & ETFs</h3>
@@ -373,7 +363,6 @@
         </div>
     </div>
 
-    <!-- BUDGETS -->
     <div id="budgets" class="section">
         <div class="card">
             <h3>Monthly budgets</h3>
@@ -382,7 +371,6 @@
         </div>
     </div>
 
-    <!-- UPLOAD -->
     <div id="upload" class="section">
         <div id="upload-status"></div>
         <div class="card">
@@ -406,11 +394,25 @@
     </div>
 </div>
 
-<!-- Firebase SDK -->
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-auth.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.7.0/firebase-firestore.js"></script>
+<!-- Firebase SDK v9+ (Working CDN) -->
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-auth.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-firestore.js"></script>
 
-<script src="app-firebase.js"></script>
+<script>
+// Initialize Firebase with your config
+const firebaseConfig = {
+  apiKey: "AIzaSyFrfHKyRe6okhN4r5w8LJO-9XIAZg0wWow",
+  authDomain: "finance-tracker-68b8c.firebaseapp.com",
+  projectId: "finance-tracker-68b8c",
+  storageBucket: "finance-tracker-68b8c.firebaseapp.com",
+  messagingSenderId: "518567453964",
+  appId: "1:518567453964:web:0284b40be4bd0c77a5d529"
+};
+
+firebase.initializeApp(firebaseConfig);
+</script>
+
+<script src="app.js"></script>
 </body>
 </html>

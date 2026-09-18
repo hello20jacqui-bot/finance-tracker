@@ -1,18 +1,4 @@
-// Firebase Configuration
-const firebaseConfig = {
-  apiKey: "AIzaSyFrfHKyRe6okhN4r5w8LJO-9XIAZg0wWow",
-  authDomain: "finance-tracker-68b8c.firebaseapp.com",
-  projectId: "finance-tracker-68b8c",
-  storageBucket: "finance-tracker-68b8c.firebaseapp.com",
-  messagingSenderId: "518567453964",
-  appId: "1:518567453964:web:0284b40be4bd0c77a5d529"
-};
-
-// Initialize Firebase
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.firestore();
-
+// Firebase Configuration (already initialized in HTML)
 let currentUser = null;
 let transactions = [];
 let holdings = { shares: [], properties: [], super: [], cash: [] };
@@ -24,14 +10,24 @@ const categories = ['Groceries', 'Dining', 'Fuel', 'Utilities', 'Insurance', 'Sh
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    checkAuthState();
-    loadFromFirestore();
+    // Small delay to ensure Firebase is loaded
+    setTimeout(() => {
+        checkAuthState();
+        loadFromLocalStorage();
+        render();
+    }, 1000);
 });
 
 // ============ FIREBASE AUTH ============
 
 function checkAuthState() {
-    auth.onAuthStateChanged(user => {
+    if (!window.firebase) {
+        console.error('Firebase not loaded');
+        showStatus('Firebase not loaded. Refresh page.', 'error');
+        return;
+    }
+    
+    firebase.auth().onAuthStateChanged(user => {
         currentUser = user;
         updateAuthUI();
         if (user) {
@@ -49,14 +45,18 @@ function loginFirebase() {
         return;
     }
     
-    // Anonymous sign-in for now (you can add Google/Email later)
-    auth.signInAnonymously()
-        .then(() => {
+    showStatus('Signing in...', 'info');
+    
+    firebase.auth().signInAnonymously()
+        .then(result => {
+            currentUser = result.user;
+            showStatus('✓ Signed in to Firebase', 'success');
             updateAuthUI();
+            loadFromFirestore();
         })
         .catch(err => {
             console.error('Auth error:', err);
-            showStatus('Authentication failed', 'error');
+            showStatus('Authentication failed: ' + err.message, 'error');
         });
 }
 
@@ -79,12 +79,13 @@ function updateAuthUI() {
 }
 
 function logout() {
-    auth.signOut()
+    firebase.auth().signOut()
         .then(() => {
             currentUser = null;
             updateAuthUI();
             loadFromLocalStorage();
             render();
+            showStatus('Signed out', 'success');
         })
         .catch(err => console.error('Logout error:', err));
 }
@@ -98,6 +99,7 @@ async function saveToFirestore() {
     }
     
     try {
+        const db = firebase.firestore();
         const userRef = db.collection('users').doc(currentUser.uid);
         
         await userRef.set({
@@ -112,7 +114,6 @@ async function saveToFirestore() {
     } catch (err) {
         console.error('Firestore save error:', err);
         showStatus('Error saving to Firebase', 'error');
-        // Fallback to local storage
         saveToLocalStorage();
     }
 }
@@ -121,6 +122,7 @@ async function loadFromFirestore() {
     if (!currentUser) return;
     
     try {
+        const db = firebase.firestore();
         const userRef = db.collection('users').doc(currentUser.uid);
         const doc = await userRef.get();
         
@@ -131,15 +133,10 @@ async function loadFromFirestore() {
             budgets = data.budgets || {};
             rules = data.rules || [];
             
-            // Also save to local for offline access
             saveToLocalStorage();
             render();
-        } else {
-            // New user - load sample or empty
-            loadFromLocalStorage();
         }
         
-        // Set up real-time listener
         setupRealtimeListener();
     } catch (err) {
         console.error('Firestore load error:', err);
@@ -150,23 +147,28 @@ async function loadFromFirestore() {
 function setupRealtimeListener() {
     if (!currentUser) return;
     
-    db.collection('users').doc(currentUser.uid)
-        .onSnapshot(doc => {
-            if (doc.exists) {
-                const data = doc.data();
-                transactions = data.transactions || [];
-                holdings = data.holdings || { shares: [], properties: [], super: [], cash: [] };
-                budgets = data.budgets || {};
-                rules = data.rules || [];
-                saveToLocalStorage();
-                render();
-            }
-        }, err => {
-            console.error('Realtime listener error:', err);
-        });
+    try {
+        const db = firebase.firestore();
+        db.collection('users').doc(currentUser.uid)
+            .onSnapshot(doc => {
+                if (doc.exists) {
+                    const data = doc.data();
+                    transactions = data.transactions || [];
+                    holdings = data.holdings || { shares: [], properties: [], super: [], cash: [] };
+                    budgets = data.budgets || {};
+                    rules = data.rules || [];
+                    saveToLocalStorage();
+                    render();
+                }
+            }, err => {
+                console.error('Realtime listener error:', err);
+            });
+    } catch (err) {
+        console.error('Setup listener error:', err);
+    }
 }
 
-// ============ LOCAL STORAGE (Offline Fallback) ============
+// ============ LOCAL STORAGE ============
 
 function saveToLocalStorage() {
     localStorage.setItem('transactions', JSON.stringify(transactions));
@@ -182,7 +184,7 @@ function loadFromLocalStorage() {
     rules = JSON.parse(localStorage.getItem('rules')) || [];
 }
 
-// ============ FILE UPLOAD & CSV PARSING ============
+// ============ FILE UPLOAD ============
 
 function uploadFile() {
     const file = document.getElementById('file-input').files[0];
@@ -231,7 +233,6 @@ function parseCSV(text, accountName) {
         const rule = rules.find(r => merchant.toLowerCase().includes(r.merchant.toLowerCase()));
         if (rule) trans.category = rule.category;
         
-        // Check for duplicates
         if (!transactions.find(t => t.date === date && t.merchant === merchant && t.amount === amount)) {
             transactions.push(trans);
         }
@@ -279,6 +280,7 @@ function loadSampleData() {
 
 function showStatus(msg, type) {
     const el = document.getElementById('upload-status');
+    if (!el) return;
     el.className = `status-message status-${type}`;
     el.textContent = msg;
 }
@@ -287,9 +289,15 @@ function showStatus(msg, type) {
 
 function switchTab(tab) {
     document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-    document.getElementById(tab).classList.add('active');
+    const section = document.getElementById(tab);
+    if (section) section.classList.add('active');
+    
     document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-    event.target.closest('.tab-btn').classList.add('active');
+    if (event && event.target) {
+        const btn = event.target.closest('.tab-btn');
+        if (btn) btn.classList.add('active');
+    }
+    
     render();
     if (tab === 'portfolio') setTimeout(renderAllocationChart, 100);
 }
@@ -481,42 +489,42 @@ function renderAllocationChart() {
 function render() {
     const m = calculateMetrics();
     
-    // Dashboard metrics
     document.getElementById('net-worth').textContent = '$' + m.netWorth.toFixed(0);
     const nwDelta = (m.investmentGain + (m.propertyValue - holdings.properties.reduce((a, p) => a + p.purchasePrice, 0))).toFixed(0);
-    document.getElementById('nw-delta').innerHTML = `${nwDelta >= 0 ? '+' : ''}$${nwDelta}`;
+    const nwEl = document.getElementById('nw-delta');
+    if (nwEl) nwEl.innerHTML = `${nwDelta >= 0 ? '+' : ''}$${nwDelta}`;
+    
     document.getElementById('liquid').textContent = '$' + (m.bankBalance + m.cashTotal).toFixed(0);
     document.getElementById('inv-total').textContent = '$' + m.investmentValue.toFixed(0);
-    document.getElementById('inv-delta').innerHTML = `<span class="${m.investmentGain >= 0 ? 'positive' : 'negative'}">${m.investmentGain >= 0 ? '+' : ''}$${m.investmentGain.toFixed(0)}</span>`;
+    const invEl = document.getElementById('inv-delta');
+    if (invEl) invEl.innerHTML = `<span class="${m.investmentGain >= 0 ? 'positive' : 'negative'}">${m.investmentGain >= 0 ? '+' : ''}$${m.investmentGain.toFixed(0)}</span>`;
     document.getElementById('month-spend').textContent = '$' + m.monthSpend.toFixed(0);
 
-    // Allocation summary
     const allocHTML = `
         <div class="allocation-item">
             <div class="allocation-name">Cash & savings</div>
             <div class="allocation-value">$${(m.bankBalance + m.cashTotal).toFixed(0)}</div>
-            <div class="allocation-pct">${((m.bankBalance + m.cashTotal) / m.netWorth * 100).toFixed(0)}% of NW</div>
+            <div class="allocation-pct">${m.netWorth > 0 ? ((m.bankBalance + m.cashTotal) / m.netWorth * 100).toFixed(0) : '0'}% of NW</div>
         </div>
         <div class="allocation-item">
             <div class="allocation-name">Shares & ETFs</div>
             <div class="allocation-value">$${m.investmentValue.toFixed(0)}</div>
-            <div class="allocation-pct">${(m.investmentValue / m.netWorth * 100).toFixed(0)}% of NW</div>
+            <div class="allocation-pct">${m.netWorth > 0 ? (m.investmentValue / m.netWorth * 100).toFixed(0) : '0'}% of NW</div>
         </div>
         <div class="allocation-item">
             <div class="allocation-name">Property (equity)</div>
             <div class="allocation-value">$${m.propertyEquity.toFixed(0)}</div>
-            <div class="allocation-pct">${(m.propertyEquity / m.netWorth * 100).toFixed(0)}% of NW</div>
+            <div class="allocation-pct">${m.netWorth > 0 ? (m.propertyEquity / m.netWorth * 100).toFixed(0) : '0'}% of NW</div>
         </div>
         <div class="allocation-item">
             <div class="allocation-name">Superannuation</div>
             <div class="allocation-value">$${m.superTotal.toFixed(0)}</div>
-            <div class="allocation-pct">${(m.superTotal / m.netWorth * 100).toFixed(0)}% of NW</div>
+            <div class="allocation-pct">${m.netWorth > 0 ? (m.superTotal / m.netWorth * 100).toFixed(0) : '0'}% of NW</div>
         </div>
     `;
     const allocEl = document.getElementById('alloc-summary');
     if (allocEl) allocEl.innerHTML = allocHTML;
 
-    // Portfolio summary
     const portSum = document.getElementById('port-summary');
     if (portSum) {
         portSum.innerHTML = `
@@ -538,12 +546,11 @@ function render() {
             <div class="metric">
                 <div class="metric-label">Rental income</div>
                 <div class="metric-value">$${(m.monthlyRental * 12).toFixed(0)}</div>
-                <div class="metric-delta">${(m.monthlyRental * 12 / (m.propertyValue || 1) * 100).toFixed(1)}% yield</div>
+                <div class="metric-delta">${m.propertyValue > 0 ? (m.monthlyRental * 12 / m.propertyValue * 100).toFixed(1) : '0'}% yield</div>
             </div>
         `;
     }
 
-    // Recent activity
     const recent = transactions.slice(-5).reverse().map(t => `
         <div style="padding: 10px; border-bottom: 1px solid #e0e0e0; display: flex; justify-content: space-between;">
             <div>
@@ -556,13 +563,8 @@ function render() {
     const recentEl = document.getElementById('recent-activity');
     if (recentEl) recentEl.innerHTML = recent;
 
-    // Holdings
     renderHoldings();
-    
-    // Transactions
     renderTransactions();
-    
-    // Budgets
     renderBudgets();
 }
 

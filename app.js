@@ -10,12 +10,23 @@ const categories = ['Groceries', 'Dining', 'Fuel', 'Utilities', 'Insurance', 'Sh
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    // Small delay to ensure Firebase is loaded
-    setTimeout(() => {
-        checkAuthState();
-        loadFromLocalStorage();
-        render();
-    }, 1000);
+    // Wait for Firebase to load
+    let firebaseRetries = 0;
+    const waitForFirebase = setInterval(() => {
+        if (window.firebase && window.firebase.auth) {
+            clearInterval(waitForFirebase);
+            console.log('Firebase loaded successfully');
+            checkAuthState();
+            loadFromLocalStorage();
+            render();
+        } else if (firebaseRetries++ > 50) {
+            clearInterval(waitForFirebase);
+            console.error('Firebase failed to load after 50 retries');
+            showStatus('Firebase failed to load. Check your internet connection.', 'error');
+            loadFromLocalStorage();
+            render();
+        }
+    }, 100);
 });
 
 // ============ FIREBASE AUTH ============
